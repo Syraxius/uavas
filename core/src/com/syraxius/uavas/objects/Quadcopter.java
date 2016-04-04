@@ -20,6 +20,9 @@ public class Quadcopter extends AbstractObject {
 	public static ArrayList<BroadcastMessage> locationBroadcast = new ArrayList<BroadcastMessage>();
 	public static ArrayList<Quadcopter> directCommunication = new ArrayList<Quadcopter>(100);
 
+	public static int globalWaypointCount = 0;
+	public static long firstWaypointTime = 0;
+
 	public enum States {
 		ARMED, COLLIDED
 	};
@@ -53,6 +56,7 @@ public class Quadcopter extends AbstractObject {
 	double ta;
 	double tb;
 	double r;
+	double originalTa;
 
 	public Quadcopter(int id) {
 		dimension.set(0.6f, 0.3f);
@@ -88,7 +92,7 @@ public class Quadcopter extends AbstractObject {
 		lastPosition = new Vector3(position);
 
 		broadcastInterval = 0.1f;
-		terminalVelocity = 5f;
+		terminalVelocity = 10f;
 		accelerationLimit = 10f;
 
 		v = terminalVelocity;
@@ -107,11 +111,14 @@ public class Quadcopter extends AbstractObject {
 
 	@Override
 	public void update(float deltaTime) {
+		originalTa = (originalTa + deltaTime) / 2;
+
 		deltaTime *= TIME_SCALE;
-		deltaTime = 0.01f;
+
+		deltaTime = 0.05f;
 
 		ta = Math.max(deltaTime, ta);
-		tb = broadcastInterval + 2 * ta;
+		// tb = broadcastInterval + 2 * ta;
 
 		double d1 = 2 * v * v / a + 2 * r;
 		double d2 = d1 + tb * v;
@@ -120,12 +127,13 @@ public class Quadcopter extends AbstractObject {
 		double d4dsdec = 2 * ta * v;
 		double d4 = d3 + d4ds + (locationBroadcast.size() - 2) * d4dsdec;
 
-		double d4partial = d3 + d4ds + 3 * d4dsdec;
-
 		double bda = tb * v;
 		double safety = 1;
 
-		minimumDistance = (float) (d4 + bda + safety);
+		double d4partial = d3 + d4ds + 3 * d4dsdec;
+		double d3extended = d3 + d4ds + bda;
+
+		minimumDistance = (float) (d3extended);
 
 		if (state == States.ARMED) {
 			taskWaypoint();
@@ -177,11 +185,23 @@ public class Quadcopter extends AbstractObject {
 	private void taskWaypoint() {
 		if (position.dst(targetWaypoint) < 1f) {
 			if (waypoints.size() > 0) {
-				System.out.println("UAV " + id + ": Waypoints left " + waypoints.size());
+				outputStatistics();
 				priority++;
 				targetWaypoint = waypoints.remove(0);
 			}
 		}
+	}
+
+	private void outputStatistics() {
+		if (firstWaypointTime == 0) {
+			firstWaypointTime = System.currentTimeMillis();
+		}
+		globalWaypointCount++;
+		long nowWaypointTime = System.currentTimeMillis();
+		float timeConversionRatio = (float) (ta / originalTa);
+		float averageVisitationRate = (float) (nowWaypointTime - firstWaypointTime) / globalWaypointCount * timeConversionRatio;
+		System.out.println("UAV " + id + ": Waypoints left " + waypoints.size());
+		System.out.printf("ta = %f, tb = %f, waypoint %d. Average time is %f\r\n", ta, tb, globalWaypointCount, averageVisitationRate);
 	}
 
 	float previousHeight;

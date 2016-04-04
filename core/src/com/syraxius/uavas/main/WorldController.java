@@ -55,6 +55,9 @@ public class WorldController extends InputAdapter {
 				Quadcopter.directCommunication.clear();
 			}
 			
+			Quadcopter.globalWaypointCount = 0;
+			Quadcopter.firstWaypointTime = 0;
+			
 			init();
 		} else if (keycode == Keys.SPACE) {
 		}
