@@ -67,4 +67,66 @@ public class QuadcopterHelper {
 	public static void generateCentral(ArrayList<Vector3> waypoints) {
 		waypoints.add(new Vector3(0, 0, 3));
 	}
+
+	public static float calculateCollisionTime(Vector3 ownship, Vector3 ownshipVelocity, Vector3 intruder, float dmin) {
+		Vector3 o = new Vector3(ownship);
+		Vector3 l = new Vector3(ownshipVelocity);
+		Vector3 c = new Vector3(intruder);
+
+		float r = dmin;
+
+		Vector3 omc = new Vector3(o).sub(c);
+
+		float a1 = l.dot(l);
+		float b1 = 2 * l.dot(omc);
+		float c1 = omc.dot(omc) - r * r;
+
+		float b2m4ac = b1 * b1 - 4 * a1 * c1;
+
+		if (b2m4ac < 0) {
+			return -1;
+		} else {
+			double t = (-b1 - Math.sqrt(b2m4ac)) / (2 * a1);
+
+			return (float) t;
+		}
+	}
+
+	public static Vector3 calculatePredictiveRepulsion(Vector3 ownship, Vector3 ownshipVelocity, Vector3 intruder, float collisionTime) {
+		Vector3 o = new Vector3(ownship);
+		Vector3 l = new Vector3(ownshipVelocity);
+		Vector3 c = new Vector3(intruder);
+		float t = collisionTime;
+
+		Vector3 lt = new Vector3(l).scl(t);
+		Vector3 oplt = new Vector3(o).add(lt);
+
+		Vector3 repulsionDirection = new Vector3(oplt).sub(c).setLength(1);
+
+		return repulsionDirection;
+	}
+
+	public static Vector3 calculateCollisionPoint(Vector3 ownship, Vector3 ownshipDirection, Vector3 intruder, float dmin) {
+		Vector3 o = new Vector3(ownship);
+		Vector3 l = new Vector3(ownshipDirection);
+		Vector3 c = new Vector3(intruder);
+
+		float r = dmin;
+
+		Vector3 omc = new Vector3(o).sub(c);
+
+		float a1 = l.dot(l);
+		float b1 = 2 * l.dot(omc);
+		float c1 = omc.dot(omc) - r * r;
+
+		float b2m4ac = b1 * b1 - 4 * a1 * c1;
+
+		if (b2m4ac < 0) {
+			return null;
+		} else {
+			double t = (-b1 - Math.sqrt(b2m4ac)) / (2 * a1);
+
+			return new Vector3(l).scl((float) t).add(o);
+		}
+	}
 }

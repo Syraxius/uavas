@@ -19,7 +19,7 @@ public class Level {
 	private void init() {
 		quadcopters = new Array<Quadcopter>();
 		quadcopters.add(new Quadcopter(0));
-		/*quadcopters.add(new Quadcopter(1));
+		quadcopters.add(new Quadcopter(1));
 		quadcopters.add(new Quadcopter(2));
 		quadcopters.add(new Quadcopter(3));
 		quadcopters.add(new Quadcopter(4));
@@ -81,7 +81,7 @@ public class Level {
 				}
 				if (differentQuadcopters && minSeparation > separation) {
 					minSeparation = separation;
-					System.out.printf("Minimum separation is %f\r\n", minSeparation);
+					//System.out.printf("Minimum separation is %f\r\n", minSeparation);
 				}
 			}
 		}
