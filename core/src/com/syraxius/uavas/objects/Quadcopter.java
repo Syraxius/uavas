@@ -12,7 +12,8 @@ import com.syraxius.uavas.main.Assets;
 import com.syraxius.uavas.util.QuadcopterHelper;
 
 public class Quadcopter extends AbstractObject {
-	private static final float TIME_SCALE = 1;
+	private static final float TIME_SCALE = 2;
+	private static final float TIME_CAP = 0.10f;
 	private static final float PRIORITY_HEIGHT = 17f;
 
 	private TextureRegion quadcopter;
@@ -85,14 +86,14 @@ public class Quadcopter extends AbstractObject {
 		wind = new Vector3();
 		wind.x = 1;
 
-		position.x = (float) (-50 + Math.random() * 100);
-		position.y = (float) (-50 + Math.random() * 100);
+		position.x = (float) (-100 + Math.random() * 200);
+		position.y = (float) (-100 + Math.random() * 200);
 		position.z = 3;
 
 		lastPosition = new Vector3(position);
 
-		broadcastInterval = 0.1f;
-		terminalVelocity = 10f;
+		broadcastInterval = 0.01f;
+		terminalVelocity = 5f;
 		accelerationLimit = 10f;
 
 		v = terminalVelocity;
@@ -101,24 +102,36 @@ public class Quadcopter extends AbstractObject {
 		tb = broadcastInterval;
 		r = 0.3;
 
-		QuadcopterHelper.generateRandomCorners(waypoints, 20);
+		// QuadcopterHelper.generateRandomCorners(waypoints, 20);
 		// QuadcopterHelper.generateToFro(waypoints, 30);
 		// QuadcopterHelper.generateRandom(waypoints, 10);
-		// QuadcopterHelper.generateCentral(waypoints);
+		QuadcopterHelper.generateCentral(waypoints);
 
 		targetWaypoint = waypoints.remove(0);
 	}
 
 	@Override
 	public void update(float deltaTime) {
+		deltaTime *= TIME_SCALE;
+		if (deltaTime > TIME_CAP) {
+			deltaTime = TIME_CAP;
+		}
+
+		if (state == States.ARMED) {
+			super.update(deltaTime);
+		}
+	}
+
+	public void controllerUpdate(float deltaTime) {
 		originalTa = (originalTa + deltaTime) / 2;
 
 		deltaTime *= TIME_SCALE;
-
-		deltaTime = 0.05f;
+		if (deltaTime > TIME_CAP) {
+			deltaTime = TIME_CAP;
+		}
 
 		ta = Math.max(deltaTime, ta);
-		// tb = broadcastInterval + 2 * ta;
+		tb = broadcastInterval;
 
 		double d1 = 2 * v * v / a + 2 * r;
 		double d2 = d1 + tb * v;
@@ -127,13 +140,13 @@ public class Quadcopter extends AbstractObject {
 		double d4dsdec = 2 * ta * v;
 		double d4 = d3 + d4ds + (locationBroadcast.size() - 2) * d4dsdec;
 
+		double d1multi = v * v / a;
 		double bda = tb * v;
-		double safety = 1;
 
-		double d4partial = d3 + d4ds + 3 * d4dsdec;
-		double d3extended = d3 + d4ds + bda;
+		double d4partial = d3 + d1multi + d4ds + 3 * d4dsdec;
+		double d3extended = d3 + d1multi;
 
-		minimumDistance = (float) (d3extended);
+		minimumDistance = (float) (18);
 
 		if (state == States.ARMED) {
 			taskWaypoint();
@@ -142,14 +155,11 @@ public class Quadcopter extends AbstractObject {
 			guidedWaypoint.set(outputVector);
 
 			simulatePidController(deltaTime);
-			simulateWind(0, 0);
-			super.update(deltaTime);
-
 			taskLocationBroadcast(deltaTime);
 		}
 	}
 
-	float kp = 1f;
+	float kp = 3.6f;
 	float ki = 0f;
 	float kd = 1.8f;
 	Vector3 previousError = new Vector3(0, 0, 0);
@@ -185,7 +195,7 @@ public class Quadcopter extends AbstractObject {
 	private void taskWaypoint() {
 		if (position.dst(targetWaypoint) < 1f) {
 			if (waypoints.size() > 0) {
-				outputStatistics();
+				// outputStatistics();
 				priority++;
 				targetWaypoint = waypoints.remove(0);
 			}

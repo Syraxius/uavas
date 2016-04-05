@@ -19,7 +19,7 @@ public class Level {
 	private void init() {
 		quadcopters = new Array<Quadcopter>();
 		quadcopters.add(new Quadcopter(0));
-		quadcopters.add(new Quadcopter(1));
+		/*quadcopters.add(new Quadcopter(1));
 		quadcopters.add(new Quadcopter(2));
 		quadcopters.add(new Quadcopter(3));
 		quadcopters.add(new Quadcopter(4));
@@ -52,8 +52,14 @@ public class Level {
 			q.shapeRender(shapeRenderer, camera);
 		}
 	}
+	
+	float minSeparation = Float.MAX_VALUE;
 
 	public void update(float deltaTime) {
+		for (Quadcopter q : quadcopters) {
+			q.controllerUpdate(deltaTime);
+		}
+		
 		for (Quadcopter q : quadcopters) {
 			q.update(deltaTime);
 		}
@@ -64,13 +70,18 @@ public class Level {
 				boolean firstArmed = quadcopters.get(i).state == States.ARMED;
 				boolean secondArmed = quadcopters.get(j).state == States.ARMED;
 				boolean bothArmed = firstArmed && secondArmed;
-				boolean collided = quadcopters.get(i).position.dst2(quadcopters.get(j).position) < 0.36f;
+				float separation = quadcopters.get(i).position.dst(quadcopters.get(j).position);
+				boolean collided = separation < 0.6f;
 
 				if (differentQuadcopters && bothArmed && collided) {
 					quadcopters.get(i).state = States.COLLIDED;
 					quadcopters.get(j).state = States.COLLIDED;
 
 					System.out.printf("COLLISION! UAV %d and UAV %d.\r\n", i, j);
+				}
+				if (differentQuadcopters && minSeparation > separation) {
+					minSeparation = separation;
+					System.out.printf("Minimum separation is %f\r\n", minSeparation);
 				}
 			}
 		}
