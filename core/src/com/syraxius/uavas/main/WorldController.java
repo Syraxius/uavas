@@ -6,6 +6,7 @@ import com.badlogic.gdx.Input.Keys;
 import com.badlogic.gdx.InputAdapter;
 import com.syraxius.uavas.objects.Quadcopter;
 import com.syraxius.uavas.util.CameraHelper;
+import com.syraxius.uavas.util.Constants;
 
 public class WorldController extends InputAdapter {
 	private static final String TAG = WorldController.class.getName();
@@ -19,7 +20,7 @@ public class WorldController extends InputAdapter {
 	private void init() {
 		Gdx.input.setInputProcessor(this);
 		cameraHelper = new CameraHelper();
-		level = new Level();
+		level = new Level(Constants.LEVEL_TYPE);
 	}
 
 	public void update(float deltaTime) {
@@ -34,13 +35,13 @@ public class WorldController extends InputAdapter {
 
 		float moveSpeed = 5 * deltaTime;
 
-		if (Gdx.input.isKeyPressed(Keys.A)) {
-		}
-		if (Gdx.input.isKeyPressed(Keys.D)) {
-		}
 		if (Gdx.input.isKeyPressed(Keys.W)) {
 		}
 		if (Gdx.input.isKeyPressed(Keys.S)) {
+		}
+		if (Gdx.input.isKeyPressed(Keys.A)) {
+		}
+		if (Gdx.input.isKeyPressed(Keys.D)) {
 		}
 		if (Gdx.input.isKeyPressed(Keys.F)) {
 		}

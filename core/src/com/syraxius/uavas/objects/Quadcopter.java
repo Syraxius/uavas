@@ -16,8 +16,8 @@ public class Quadcopter extends AbstractObject {
 	private static final float TIME_SCALE = 1;
 	private static final float TIME_CAP = 0.05f;
 	private static final float PRIORITY_HEIGHT = 17f;
-	private static final float BROADCAST_PERIOD = 0.01f;
-	private static final int NUM_QUADCOPTERS = 3;
+	private static final float BROADCAST_PERIOD = 0.1f;
+	private static final int NUM_QUADCOPTERS = Constants.NUM_QUADCOPTERS;
 
 	private TextureRegion quadcopter;
 	private float red;
@@ -91,12 +91,14 @@ public class Quadcopter extends AbstractObject {
 		green = 1.0f;
 		blue = 1.0f;
 
+		float diameter = Math.max(Constants.VIEWPORT_HEIGHT * 0.02f, 0.6f);
+
 		if (Constants.VIEW_2D_ONLY) {
-			dimension.set(0.6f, 0.6f);
-			origin.set(0.3f, 0.3f);
+			dimension.set(diameter, diameter);
+			origin.set(diameter / 2, diameter / 2);
 		} else {
-			dimension.set(0.6f, 0.3f);
-			origin.set(0.3f, 0.15f);
+			dimension.set(diameter, diameter / 2);
+			origin.set(diameter / 2, diameter / 4);
 		}
 
 		targetWaypoint = new Vector3();
@@ -166,20 +168,21 @@ public class Quadcopter extends AbstractObject {
 		ta = Math.max(deltaTime, ta);
 		tb = broadcastInterval;
 
+		// Basic Distance Set
+		double d4ds = 0.5 * v * v / a + ta * ta * a + 4 * ta * v;
+		double d4dsdec = 2 * ta * v;
 		double d1 = 2 * v * v / a + 2 * r;
 		double d2 = d1 + tb * v;
 		double d3 = d2 + ta * v;
-		double d4ds = 0.5 * v * v / a + ta * ta * a + 4 * ta * v;
-		double d4dsdec = 2 * ta * v;
 		double d4 = d3 + d4ds + (locationBroadcast.size() - 2) * d4dsdec;
 
+		// Extended Distance Sets
 		double d1multi = v * v / a;
 		double bda = tb * v;
-
-		double d4partial = d3 + d1multi + d4ds + 3 * d4dsdec;
 		double d3extended = d3 + d1multi;
+		double d4partial = d3 + d1multi + d4ds + 3 * d4dsdec;
 
-		dmin = (float) d3;
+		dmin = (float) (d3extended);
 
 		if (state == States.ARMED) {
 			taskWaypoint();
@@ -254,55 +257,39 @@ public class Quadcopter extends AbstractObject {
 	private Vector3 taskGeneratorBasedControl(float deltaTime) {
 		Vector3 accumulatorVector = new Vector3(0, 0, 0);
 
+		avoiding = false;
+		predictivelyAvoiding = false;
+
 		clearCheckedFlag();
 		BroadcastMessage highestUav = getHighestPriorityLinkedUav(id);
 
+		boolean isCritical = highestUav.id != id;
+		boolean isUavInTheWay = false;
+
+		int nearestUavInTheWay = getNearestUavInTheWay();
+		if (nearestUavInTheWay != -1) {
+			Vector3 thisBroadcastedPosition = locationBroadcast.get(this.id).position;
+			Vector3 otherBroadcastedPosition = locationBroadcast.get(nearestUavInTheWay).position;
+			float otherDistanceToWaypoint = otherBroadcastedPosition.dst(targetWaypoint);
+			float thisDistanceToWaypoint = thisBroadcastedPosition.dst(targetWaypoint);
+			isUavInTheWay = otherDistanceToWaypoint < thisDistanceToWaypoint;
+		}
+
 		switch (cState) {
 		case NORMAL:
-			break;
 
-		case AVOIDING:
-			break;
-
-		case CRITICAL:
+			if (isCritical) {
+				accumulatorVector.add(generatorCollisionAvoidance(highestUav));
+			} else if (isUavInTheWay) {
+				accumulatorVector.add(QuadcopterHelper.predictive2d(this.position, locationBroadcast.get(nearestUavInTheWay).position, targetWaypoint, 2 * dmin, 90.0f).scl(1000));
+			} else {
+				accumulatorVector.add(generatorHorizontalWaypoint());
+				accumulatorVector.add(generatorElevation());
+			}
 			break;
 
 		case POST_AVOIDANCE:
 			break;
-		}
-
-		avoiding = false;
-		predictivelyAvoiding = false;
-
-		boolean isAvoidance = highestUav.id != id;
-
-		if (isAvoidance) {
-			accumulatorVector.add(generatorCollisionAvoidance(highestUav));
-		}
-
-		if (avoiding) {
-			postAvoidanceTimer = 0;
-			accumulatorVector.setLength(100);
-		}
-
-		boolean isPostAvoidance = !avoiding && (postAvoidanceTimer > 0);
-
-		if (isPostAvoidance) {
-			postAvoidanceTimer -= deltaTime;
-			accumulatorVector.add(generatorPostAvoidance());
-		}
-
-		boolean isPredictiveAvoidance = !avoiding && isAvoidance && !isPostAvoidance;
-
-		if (isPredictiveAvoidance) {
-			accumulatorVector.add(generatorPredictiveAvoidanceStop());
-		}
-
-		boolean isNormal = !avoiding && !predictivelyAvoiding && !isPostAvoidance;
-
-		if (isNormal) {
-			accumulatorVector.add(generatorHorizontalWaypoint());
-			accumulatorVector.add(generatorElevation());
 		}
 
 		Vector3 outputVector = new Vector3(accumulatorVector).add(this.position);
@@ -329,122 +316,45 @@ public class Quadcopter extends AbstractObject {
 	private Vector3 generatorCollisionAvoidance(BroadcastMessage highestUav) {
 		Vector3 generatorVector = new Vector3(0, 0, 0);
 
-		int numAvoiding = 0;
-
-		float thisDistanceToHighestUav = this.position.dst(highestUav.position);
 		float thisBroadcastedDistanceToHighestUav = locationBroadcast.get(id).position.dst(highestUav.position);
 
 		for (int i = 0; i < locationBroadcast.size(); i++) {
 			BroadcastMessage other = locationBroadcast.get(i);
 
-			if (other.disabled) {
+			boolean isOtherUavDisabled = other.disabled;
+
+			if (isOtherUavDisabled) {
 				continue;
 			}
 
-			if (this.id != other.id) {
-				float absoluteDistance = this.position.dst(other.position);
-				float xyDistance = Vector2.dst(this.position.x, this.position.y, other.position.x, other.position.y);
-				float zDistance = this.position.z - other.position.z;
+			boolean isSameUav = this.id == other.id;
 
-				float scaleDistance = 1 - absoluteDistance / dmin;
-				float otherDistanceToHighestUav = other.position.dst(highestUav.position);
+			if (isSameUav) {
+				continue;
+			}
 
-				float deltaTb = other.time;
-				float deltaDistance = (float) (deltaTb * v);
-				float timeAbsoluteDistance = absoluteDistance - deltaDistance;
-				float timeAbsoluteDistanceNonNeg = Math.max(timeAbsoluteDistance, 0);
-				float timeScaleDistance = 1 - timeAbsoluteDistanceNonNeg / dmin;
+			float absoluteDistance = this.position.dst(other.position);
+			float xyDistance = Vector2.dst(this.position.x, this.position.y, other.position.x, other.position.y);
+			float zDistance = this.position.z - other.position.z;
 
-				boolean isInCollisionSphere = absoluteDistance <= dmin;
-				boolean isCloserThanThisUav = otherDistanceToHighestUav <= thisBroadcastedDistanceToHighestUav;
+			float otherDistanceToHighestUav = other.position.dst(highestUav.position);
 
-				if (isInCollisionSphere && isCloserThanThisUav) {
-					avoiding = true;
-					numAvoiding++;
-					generatorVector.add(QuadcopterHelper.repulsion2d(this.position, other.position, timeScaleDistance));
-					/*
-					 * if (numAvoiding > 1) { generatorVector.add(QuadcopterHelper.repulsion2d(this.position, highestUav.position, timeScaleDistance)); }
-					 */
-				}
+			float deltaTb = other.time;
+			float deltaDistance = (float) (deltaTb * v);
+			float worstAbsoluteDistance = Math.max(absoluteDistance - deltaDistance, 0);
+			float timeScaleDistance = (1 - worstAbsoluteDistance / dmin) * 1000;
+
+			boolean isInCollisionSphere = absoluteDistance <= dmin;
+			//boolean isInCollisionSphere = (absoluteDistance - deltaDistance) <= dmin;
+			boolean isCloserThanThisUav = otherDistanceToHighestUav <= thisBroadcastedDistanceToHighestUav;
+
+			if (isInCollisionSphere && isCloserThanThisUav) {
+				avoiding = true;
+				generatorVector.add(QuadcopterHelper.repulsion2d(this.position, other.position, timeScaleDistance));
 			}
 		}
 
 		return generatorVector;
-	}
-
-	private Vector3 generatorPostAvoidance() {
-		return QuadcopterHelper.rotation2d(this.position, targetWaypoint, 1, -90);
-	}
-
-	private Vector3 generatorPredictiveAvoidancePredodge() {
-		Vector3 generatorVector = new Vector3(0, 0, 0);
-
-		float closestDistance = Float.MAX_VALUE;
-
-		for (int i = 0; i < locationBroadcast.size(); i++) {
-			BroadcastMessage other = locationBroadcast.get(i);
-
-			if (this.id != other.id) {
-				float dpredict = dmin * 3;
-
-				Vector3 direction = generatorHorizontalWaypoint();
-
-				Vector3 collisionPoint = QuadcopterHelper.calculateCollisionPoint(position, direction, other.position, dpredict);
-
-				if (collisionPoint == null) {
-					continue;
-				}
-
-				float absoluteDistanceToCollision = this.position.dst(collisionPoint);
-				float absoluteDistanceToTargetWaypoint = this.position.dst(targetWaypoint);
-				float otherAbsoluteDistanceToTargetWaypoint = other.position.dst(targetWaypoint);
-
-				boolean isPossibleCollision = absoluteDistanceToCollision < dpredict;
-				boolean isCloserToWaypoint = absoluteDistanceToTargetWaypoint < otherAbsoluteDistanceToTargetWaypoint;
-
-				float weight = (1 - absoluteDistanceToCollision / dpredict);
-
-				if (isPossibleCollision && !isCloserToWaypoint) {
-					predictivelyAvoiding = true;
-					if (absoluteDistanceToCollision < closestDistance) {
-						closestDistance = absoluteDistanceToCollision;
-						Vector3 dodgeLocation = QuadcopterHelper.calculateCollisionPoint(position, direction, other.position, dpredict);
-						generatorVector = dodgeLocation;
-					}
-				}
-			}
-		}
-
-		return generatorVector;
-	}
-
-	private Vector3 generatorPredictiveAvoidanceStop() {
-		Vector3 generatorVector = new Vector3(0, 0, 0);
-
-		for (int i = 0; i < locationBroadcast.size(); i++) {
-			BroadcastMessage other = locationBroadcast.get(i);
-
-			if (this.id != other.id) {
-				float t = QuadcopterHelper.calculateCollisionTime(position, velocity, other.position, dmin);
-
-				if (t < 0) {
-					continue;
-				}
-
-				float tmin = (float) 100;
-
-				boolean isPossibleCollision = t < tmin;
-
-				float weight = (1 - t / tmin);
-
-				if (isPossibleCollision) {
-					predictivelyAvoiding = true;
-					generatorVector.add(QuadcopterHelper.calculatePredictiveRepulsion(position, velocity, other.position, t).scl(weight));
-				}
-			}
-		}
-
-		return generatorVector.setLength(50);
 	}
 
 	private Vector3 generatorHorizontalWaypoint() {
@@ -470,7 +380,9 @@ public class Quadcopter extends AbstractObject {
 		for (int i = 0; i < locationBroadcast.size(); i++) {
 			BroadcastMessage otherUav = locationBroadcast.get(i);
 
-			if (otherUav.disabled) {
+			boolean isOtherUavDisabled = otherUav.disabled;
+
+			if (isOtherUavDisabled) {
 				continue;
 			}
 
@@ -480,16 +392,20 @@ public class Quadcopter extends AbstractObject {
 				continue;
 			}
 
+			boolean isProcessedBefore = checkedFlag[i] == true;
+
+			if (isProcessedBefore) {
+				continue;
+			}
+
 			float absoluteDistance = thisUav.position.dst(otherUav.position);
 			float xyDistance = Vector2.dst(thisUav.position.x, thisUav.position.y, otherUav.position.x, otherUav.position.y);
 			float zDistance = thisUav.position.z - otherUav.position.z;
 
 			boolean isInCollisionSphere = absoluteDistance <= dmin;
 			boolean isPossiblyInCollisionSphere = absoluteDistance - (tb * v) <= dmin;
-			boolean isPossiblyInCollisionSphere2 = absoluteDistance - (0.5 * v) <= dmin;
-			boolean isProcessedBefore = checkedFlag[i] == true;
 
-			if (isPossiblyInCollisionSphere && !isProcessedBefore) {
+			if (isPossiblyInCollisionSphere) {
 				BroadcastMessage otherHighestUav = getHighestPriorityLinkedUav(otherUav.id);
 
 				boolean isLowerPriority = thisHighestUav.priority > otherHighestUav.priority;
@@ -507,6 +423,41 @@ public class Quadcopter extends AbstractObject {
 		}
 
 		return thisHighestUav;
+	}
+
+	private int getNearestUavInTheWay() {
+		float tmin = Float.MAX_VALUE;
+		int idmin = -1;
+
+		for (int i = 0; i < locationBroadcast.size(); i++) {
+			BroadcastMessage other = locationBroadcast.get(i);
+
+			if (this.id == other.id) {
+				continue;
+			}
+
+			if (other.disabled) {
+				continue;
+			}
+
+			Vector3 ownshipDirection = new Vector3(targetWaypoint).sub(this.position);
+			float t = QuadcopterHelper.calculateCollisionDistance(this.position, ownshipDirection, other.position, dmin);
+
+			if (t < 0) {
+				continue;
+			}
+
+			if (t > tmin) {
+				continue;
+			}
+
+			tmin = t;
+			idmin = other.id;
+
+			predictivelyAvoiding = true;
+		}
+
+		return idmin;
 	}
 
 	public int getNoHigherPriority() {
@@ -580,7 +531,7 @@ public class Quadcopter extends AbstractObject {
 	@Override
 	public void shapeRender(ShapeRenderer shapeRenderer, Camera camera) {
 		Vector3 printedWaypoint;
-		printedWaypoint = targetWaypoint;
+		printedWaypoint = guidedWaypoint;
 
 		if (Constants.VIEW_2D_ONLY) {
 			if (Constants.DISPLAY_TARGET_LINE) {
@@ -599,10 +550,11 @@ public class Quadcopter extends AbstractObject {
 
 			if (Constants.DISPLAY_BROADCAST_DANGER_AREA) {
 				BroadcastMessage bM = locationBroadcast.get(id);
-				float dTb = (System.currentTimeMillis() - bM.time) / 1000f;
-				float bda = (float) (dTb * v);
+				// float dTb = (System.currentTimeMillis() - bM.time) / 1000f;
+				// float bda = (float) (dTb * v);
+				float bda = dmin;
 				shapeRenderer.setColor(1, 0, 0, 0.1f);
-				shapeRenderer.circle(bM.position.x, bM.position.y / 2 + bM.position.z, bda, 40);
+				shapeRenderer.circle(bM.position.x, bM.position.y, bda, 40);
 			}
 		} else {
 			if (Constants.DISPLAY_OWNSHIP_HEIGHT_LINE) {
@@ -641,8 +593,9 @@ public class Quadcopter extends AbstractObject {
 
 			if (Constants.DISPLAY_BROADCAST_DANGER_AREA) {
 				BroadcastMessage bM = locationBroadcast.get(id);
-				float dTb = (System.currentTimeMillis() - bM.time) / 1000f;
-				float bda = (float) (dTb * v);
+				// float dTb = (System.currentTimeMillis() - bM.time) / 1000f;
+				// float bda = (float) (dTb * v);
+				float bda = dmin;
 				shapeRenderer.setColor(1, 0, 0, 0.1f);
 				shapeRenderer.circle(bM.position.x, bM.position.y / 2 + bM.position.z, bda, 40);
 			}

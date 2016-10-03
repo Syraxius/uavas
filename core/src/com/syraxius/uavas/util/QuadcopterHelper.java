@@ -19,18 +19,35 @@ public class QuadcopterHelper {
 	}
 
 	public static Vector3 rotation3d(Vector3 thisPosition, Vector3 otherPosition, float vectorWeight) {
-		Vector3 rotationVector = new Vector3(thisPosition).sub(otherPosition);
+		Vector3 rotationVector = new Vector3(otherPosition).sub(thisPosition);
 		rotationVector.setLength(vectorWeight);
 		rotationVector.rotate(90, 0, 0, 1);
 		return rotationVector;
 	}
 
 	public static Vector3 rotation2d(Vector3 thisPosition, Vector3 otherPosition, float vectorWeight, float angle) {
-		Vector3 rotationVector = new Vector3(thisPosition).sub(otherPosition);
+		Vector3 rotationVector = new Vector3(otherPosition).sub(thisPosition);
 		rotationVector.z = 0;
 		rotationVector.setLength(vectorWeight);
 		rotationVector.rotate(angle, 0, 0, 1);
 		return rotationVector;
+	}
+	
+	public static Vector3 predictive2d(Vector3 thisPosition, Vector3 otherPosition, Vector3 targetPosition, float vectorWeight, float angle) {
+		Vector3 a = new Vector3(otherPosition).sub(thisPosition).rotate(90, 0, 0, 1);
+		Vector3 b = new Vector3(targetPosition).sub(thisPosition);
+		float dot = a.dot(b);
+		float finalAngle;
+		if (dot > 0) {
+			finalAngle = angle;
+		} else {
+			finalAngle = -angle;
+		}
+		
+		Vector3 predictiveVector = new Vector3(otherPosition).sub(thisPosition);
+		predictiveVector.z = 0;
+		predictiveVector.add(rotation2d(thisPosition, otherPosition, vectorWeight, finalAngle));
+		return predictiveVector;
 	}
 
 	public static ArrayList<Vector3> generateRandomCorners(float separation, int count) {
@@ -145,6 +162,31 @@ public class QuadcopterHelper {
 			double t = (-b1 - Math.sqrt(b2m4ac)) / (2 * a1);
 
 			return new Vector3(l).scl((float) t);
+		}
+	}
+	
+	public static float calculateCollisionDistance(Vector3 ownship, Vector3 ownshipDirection, Vector3 intruder, float dmin) {
+		Vector3 o = new Vector3(ownship);
+		Vector3 l = new Vector3(ownshipDirection).setLength(1);
+		Vector3 c = new Vector3(intruder);
+
+		float r = dmin;
+
+		Vector3 omc = new Vector3(o).sub(c);
+
+		float a1 = l.dot(l);
+		float b1 = 2 * l.dot(omc);
+		float c1 = omc.dot(omc) - r * r;
+
+		float b2m4ac = b1 * b1 - 4 * a1 * c1;
+
+		if (b2m4ac < 0) {
+			return Float.MAX_VALUE;
+		} else {
+			float t1 = (float) ((-b1 - Math.sqrt(b2m4ac)) / (2 * a1));
+			//float t2 = (float) ((-b1 - Math.sqrt(b2m4ac)) / (2 * a1));
+			
+			return t1;
 		}
 	}
 }
