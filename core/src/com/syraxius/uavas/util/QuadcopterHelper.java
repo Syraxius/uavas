@@ -70,7 +70,7 @@ public class QuadcopterHelper {
 
 	public static float calculateCollisionTime(Vector3 ownship, Vector3 ownshipVelocity, Vector3 intruder, float dmin) {
 		Vector3 o = new Vector3(ownship);
-		Vector3 l = new Vector3(ownshipVelocity);
+		Vector3 l = new Vector3(ownshipVelocity).scl(5);
 		Vector3 c = new Vector3(intruder);
 
 		float r = dmin;
@@ -126,7 +126,7 @@ public class QuadcopterHelper {
 		} else {
 			double t = (-b1 - Math.sqrt(b2m4ac)) / (2 * a1);
 
-			return new Vector3(l).scl((float) t).add(o);
+			return new Vector3(l).scl((float) t);
 		}
 	}
 }

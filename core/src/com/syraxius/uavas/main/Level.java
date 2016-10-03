@@ -3,6 +3,7 @@ package com.syraxius.uavas.main;
 import com.badlogic.gdx.graphics.Camera;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.Array;
 import com.syraxius.uavas.objects.Quadcopter;
 import com.syraxius.uavas.objects.Quadcopter.States;
@@ -18,27 +19,19 @@ public class Level {
 
 	private void init() {
 		quadcopters = new Array<Quadcopter>();
-		quadcopters.add(new Quadcopter(0));
-		quadcopters.add(new Quadcopter(1));
-		quadcopters.add(new Quadcopter(2));
-		quadcopters.add(new Quadcopter(3));
-		quadcopters.add(new Quadcopter(4));
-		quadcopters.add(new Quadcopter(5));
-		quadcopters.add(new Quadcopter(6));
-		quadcopters.add(new Quadcopter(7));
-		quadcopters.add(new Quadcopter(8));
-		quadcopters.add(new Quadcopter(9));
-		quadcopters.add(new Quadcopter(10));
-		quadcopters.add(new Quadcopter(11));
-		quadcopters.add(new Quadcopter(12));
-		quadcopters.add(new Quadcopter(13));
-		quadcopters.add(new Quadcopter(14));
-		quadcopters.add(new Quadcopter(15));
-		quadcopters.add(new Quadcopter(16));
-		quadcopters.add(new Quadcopter(17));
-		quadcopters.add(new Quadcopter(18));
-		quadcopters.add(new Quadcopter(19));
-		quadcopters.add(new Quadcopter(20));// */
+		int numQuadcopters = 250;
+		// float degreesPerUav = 360.0f / numQuadcopters;
+		// int circleRadius = 100;
+		// for (int i = 0; i < numQuadcopters; i++) {
+		// double x1 = circleRadius * Math.cos(degreesPerUav * i / 180 * Math.PI);
+		// double y1 = circleRadius * Math.sin(degreesPerUav * i / 180 * Math.PI);
+		// double x2 = circleRadius * Math.cos((degreesPerUav * i + 180) / 180 * Math.PI);
+		// double y2 = circleRadius * Math.sin((degreesPerUav * i + 180) / 180 * Math.PI);
+		// quadcopters.add(new Quadcopter(i, new Vector3((float) x1, (float) y1, 3.0f), new Vector3((float) x2, (float) y2, 3.0f)));
+		// }
+		for (int i = 0; i < numQuadcopters; i++) {
+			quadcopters.add(new Quadcopter(i));
+		}
 	}
 
 	public void render(SpriteBatch batch) {
@@ -52,14 +45,14 @@ public class Level {
 			q.shapeRender(shapeRenderer, camera);
 		}
 	}
-	
+
 	float minSeparation = Float.MAX_VALUE;
 
 	public void update(float deltaTime) {
 		for (Quadcopter q : quadcopters) {
 			q.controllerUpdate(deltaTime);
 		}
-		
+
 		for (Quadcopter q : quadcopters) {
 			q.update(deltaTime);
 		}
@@ -81,7 +74,7 @@ public class Level {
 				}
 				if (differentQuadcopters && minSeparation > separation) {
 					minSeparation = separation;
-					//System.out.printf("Minimum separation is %f\r\n", minSeparation);
+					// System.out.printf("Minimum separation is %f\r\n", minSeparation);
 				}
 			}
 		}

@@ -12,14 +12,16 @@ import com.syraxius.uavas.main.Assets;
 import com.syraxius.uavas.util.QuadcopterHelper;
 
 public class Quadcopter extends AbstractObject {
-	private static final float TIME_SCALE = 2;
+	private static final float TIME_SCALE = 5;
 	private static final float TIME_CAP = 0.05f;
 	private static final float PRIORITY_HEIGHT = 17f;
+	private static final float BROADCAST_PERIOD = 0.01f;
+	private static final int NUM_QUADCOPTERS = 250;
 
 	private TextureRegion quadcopter;
 
 	public static ArrayList<BroadcastMessage> locationBroadcast = new ArrayList<BroadcastMessage>();
-	public static ArrayList<Quadcopter> directCommunication = new ArrayList<Quadcopter>(100);
+	public static ArrayList<Quadcopter> directCommunication = new ArrayList<Quadcopter>(NUM_QUADCOPTERS);
 
 	public static int globalWaypointCount = 0;
 	public static long firstWaypointTime = 0;
@@ -49,7 +51,7 @@ public class Quadcopter extends AbstractObject {
 	public float dmin;
 	public boolean avoiding;
 	public boolean predictivelyAvoiding;
-	public boolean[] checkedFlag = new boolean[100];
+	public boolean[] checkedFlag = new boolean[NUM_QUADCOPTERS];
 
 	Vector3 lastPosition;
 
@@ -58,12 +60,41 @@ public class Quadcopter extends AbstractObject {
 	double ta;
 	double tb;
 	double r;
-	double originalTa;
+	double originalDeltaTime;
+	double transformedDeltaTime;
 
 	public Quadcopter(int id) {
 		dimension.set(0.6f, 0.3f);
 		origin.set(0.3f, 0.15f);
 		quadcopter = Assets.instance.quadcopter.quadcopter;
+
+		waypoints = new ArrayList<Vector3>();
+		targetWaypoint = new Vector3();
+		guidedWaypoint = new Vector3();
+
+		position.x = (float) (-100 + Math.random() * 200);
+		position.y = (float) (-100 + Math.random() * 200);
+		position.z = 3;
+
+		QuadcopterHelper.generateRandomCorners(waypoints, 30);
+		// QuadcopterHelper.generateToFro(waypoints, 30);
+		// QuadcopterHelper.generateRandom(waypoints, 10);
+		// QuadcopterHelper.generateCentral(waypoints);
+
+		init(id);
+	}
+
+	public Quadcopter(int id, Vector3 starting, Vector3 ending) {
+		dimension.set(0.6f, 0.3f);
+		origin.set(0.3f, 0.15f);
+		quadcopter = Assets.instance.quadcopter.quadcopter;
+
+		waypoints = new ArrayList<Vector3>();
+		targetWaypoint = new Vector3();
+		guidedWaypoint = new Vector3();
+
+		position = starting;
+		waypoints.add(ending);
 
 		init(id);
 	}
@@ -80,20 +111,12 @@ public class Quadcopter extends AbstractObject {
 		broadcastTimer = (float) (Math.random() * 1000);
 		postAvoidanceTimer = 0;
 
-		waypoints = new ArrayList<Vector3>();
-		targetWaypoint = new Vector3();
-		guidedWaypoint = new Vector3();
-
 		wind = new Vector3();
 		wind.x = 1;
 
-		position.x = (float) (-100 + Math.random() * 200);
-		position.y = (float) (-100 + Math.random() * 200);
-		position.z = 3;
-
 		lastPosition = new Vector3(position);
 
-		broadcastInterval = 0.1f;
+		broadcastInterval = BROADCAST_PERIOD;
 		terminalVelocity = 5f;
 		accelerationLimit = 10f;
 
@@ -102,11 +125,6 @@ public class Quadcopter extends AbstractObject {
 		ta = 0;
 		tb = broadcastInterval;
 		r = 0.3;
-
-		QuadcopterHelper.generateRandomCorners(waypoints, 30);
-		// QuadcopterHelper.generateToFro(waypoints, 30);
-		// QuadcopterHelper.generateRandom(waypoints, 10);
-		// QuadcopterHelper.generateCentral(waypoints);
 
 		targetWaypoint = waypoints.remove(0);
 	}
@@ -118,18 +136,23 @@ public class Quadcopter extends AbstractObject {
 			deltaTime = TIME_CAP;
 		}
 
+		BroadcastMessage bM = locationBroadcast.get(id);
+		bM.time += deltaTime;
+
 		if (state == States.ARMED) {
 			super.update(deltaTime);
 		}
 	}
 
 	public void controllerUpdate(float deltaTime) {
-		originalTa = (originalTa + deltaTime) / 2;
+		originalDeltaTime = (originalDeltaTime + deltaTime) / 2;
 
 		deltaTime *= TIME_SCALE;
 		if (deltaTime > TIME_CAP) {
 			deltaTime = TIME_CAP;
 		}
+
+		transformedDeltaTime = (transformedDeltaTime + deltaTime) / 2;
 
 		ta = Math.max(deltaTime, ta);
 		tb = broadcastInterval;
@@ -147,7 +170,7 @@ public class Quadcopter extends AbstractObject {
 		double d4partial = d3 + d1multi + d4ds + 3 * d4dsdec;
 		double d3extended = d3 + d1multi;
 
-		dmin = (float) (d3extended);
+		dmin = (float) (d3 * 2);
 
 		if (state == States.ARMED) {
 			taskWaypoint();
@@ -195,10 +218,14 @@ public class Quadcopter extends AbstractObject {
 
 	private void taskWaypoint() {
 		if (position.dst(targetWaypoint) < 1f) {
+			outputStatistics();
 			if (waypoints.size() > 0) {
-				outputStatistics();
 				priority++;
 				targetWaypoint = waypoints.remove(0);
+			} else {
+				state = States.COLLIDED;
+				BroadcastMessage broadcastMessage = locationBroadcast.get(id);
+				broadcastMessage.disabled = true;
 			}
 		}
 	}
@@ -209,7 +236,7 @@ public class Quadcopter extends AbstractObject {
 		}
 		globalWaypointCount++;
 		long nowWaypointTime = System.currentTimeMillis();
-		float timeConversionRatio = (float) (ta / originalTa);
+		float timeConversionRatio = (float) (transformedDeltaTime / originalDeltaTime);
 		float averageVisitationRate = (float) (nowWaypointTime - firstWaypointTime) / globalWaypointCount * timeConversionRatio;
 		System.out.println("UAV " + id + ": Waypoints left " + waypoints.size());
 		System.out.printf("ta = %f, tb = %f, waypoint %d. Average time is %f\r\n", ta, tb, globalWaypointCount, averageVisitationRate);
@@ -245,10 +272,10 @@ public class Quadcopter extends AbstractObject {
 		boolean isPredictiveAvoidance = !avoiding && isAvoidance && !isPostAvoidance;
 
 		if (isPredictiveAvoidance) {
-			accumulatorVector.add(generatorPredictiveAvoidancePredodge());
+			accumulatorVector.add(generatorPredictiveAvoidanceStop());
 		}
 
-		boolean isNormal = !avoiding && !isPredictiveAvoidance && !isPostAvoidance;
+		boolean isNormal = !avoiding && !predictivelyAvoiding && !isPostAvoidance;
 
 		if (isNormal) {
 			accumulatorVector.add(generatorHorizontalWaypoint());
@@ -273,19 +300,23 @@ public class Quadcopter extends AbstractObject {
 			bM.priority = effectivePriority;
 			bM.position.set(position);
 			bM.time = 0;
-		} else {
-			bM.time += deltaTime;
 		}
 	}
 
 	private Vector3 generatorCollisionAvoidance(BroadcastMessage highestUav) {
 		Vector3 generatorVector = new Vector3(0, 0, 0);
 
+		int numAvoiding = 0;
+
 		float thisDistanceToHighestUav = this.position.dst(highestUav.position);
 		float thisBroadcastedDistanceToHighestUav = locationBroadcast.get(id).position.dst(highestUav.position);
 
 		for (int i = 0; i < locationBroadcast.size(); i++) {
 			BroadcastMessage other = locationBroadcast.get(i);
+
+			if (other.disabled) {
+				continue;
+			}
 
 			if (this.id != other.id) {
 				float absoluteDistance = this.position.dst(other.position);
@@ -306,7 +337,11 @@ public class Quadcopter extends AbstractObject {
 
 				if (isInCollisionSphere && isCloserThanThisUav) {
 					avoiding = true;
+					numAvoiding++;
 					generatorVector.add(QuadcopterHelper.repulsion2d(this.position, other.position, timeScaleDistance));
+					/*if (numAvoiding > 1) {
+						generatorVector.add(QuadcopterHelper.repulsion2d(this.position, highestUav.position, timeScaleDistance));
+					}*/
 				}
 			}
 		}
@@ -321,28 +356,38 @@ public class Quadcopter extends AbstractObject {
 	private Vector3 generatorPredictiveAvoidancePredodge() {
 		Vector3 generatorVector = new Vector3(0, 0, 0);
 
+		float closestDistance = Float.MAX_VALUE;
+
 		for (int i = 0; i < locationBroadcast.size(); i++) {
 			BroadcastMessage other = locationBroadcast.get(i);
 
 			if (this.id != other.id) {
+				float dpredict = dmin * 3;
+
 				Vector3 direction = generatorHorizontalWaypoint();
-				Vector3 collisionPoint = QuadcopterHelper.calculateCollisionPoint(position, direction, other.position, dmin);
+
+				Vector3 collisionPoint = QuadcopterHelper.calculateCollisionPoint(position, direction, other.position, dpredict);
 
 				if (collisionPoint == null) {
 					continue;
 				}
 
-				float dpredict = (float) (dmin);
-
 				float absoluteDistanceToCollision = this.position.dst(collisionPoint);
+				float absoluteDistanceToTargetWaypoint = this.position.dst(targetWaypoint);
+				float otherAbsoluteDistanceToTargetWaypoint = other.position.dst(targetWaypoint);
 
 				boolean isPossibleCollision = absoluteDistanceToCollision < dpredict;
+				boolean isCloserToWaypoint = absoluteDistanceToTargetWaypoint < otherAbsoluteDistanceToTargetWaypoint;
 
 				float weight = (1 - absoluteDistanceToCollision / dpredict);
 
-				if (isPossibleCollision) {
+				if (isPossibleCollision && !isCloserToWaypoint) {
 					predictivelyAvoiding = true;
-					generatorVector.add(QuadcopterHelper.repulsion2d(collisionPoint, other.position, weight));
+					if (absoluteDistanceToCollision < closestDistance) {
+						closestDistance = absoluteDistanceToCollision;
+						Vector3 dodgeLocation = QuadcopterHelper.calculateCollisionPoint(position, direction, other.position, dpredict);
+						generatorVector = dodgeLocation;
+					}
 				}
 			}
 		}
@@ -363,7 +408,7 @@ public class Quadcopter extends AbstractObject {
 					continue;
 				}
 
-				float tmin = (float) 2;
+				float tmin = (float) 100;
 
 				boolean isPossibleCollision = t < tmin;
 
@@ -376,7 +421,7 @@ public class Quadcopter extends AbstractObject {
 			}
 		}
 
-		return generatorVector;
+		return generatorVector.setLength(50);
 	}
 
 	private Vector3 generatorHorizontalWaypoint() {
@@ -389,7 +434,7 @@ public class Quadcopter extends AbstractObject {
 	}
 
 	private void clearCheckedFlag() {
-		for (int i = 0; i < 100; i++) {
+		for (int i = 0; i < NUM_QUADCOPTERS; i++) {
 			checkedFlag[i] = false;
 		}
 	}
@@ -401,6 +446,10 @@ public class Quadcopter extends AbstractObject {
 
 		for (int i = 0; i < locationBroadcast.size(); i++) {
 			BroadcastMessage otherUav = locationBroadcast.get(i);
+
+			if (otherUav.disabled) {
+				continue;
+			}
 
 			boolean isSameUav = thisUav.id == otherUav.id;
 
@@ -414,10 +463,10 @@ public class Quadcopter extends AbstractObject {
 
 			boolean isInCollisionSphere = absoluteDistance <= dmin;
 			boolean isPossiblyInCollisionSphere = absoluteDistance - (tb * v) <= dmin;
-			boolean isPossiblyInCollisionSphere2 = absoluteDistance - (2 * v) <= dmin;
+			boolean isPossiblyInCollisionSphere2 = absoluteDistance - (0.5 * v) <= dmin;
 			boolean isProcessedBefore = checkedFlag[i] == true;
 
-			if (isPossiblyInCollisionSphere2 && !isProcessedBefore) {
+			if (isPossiblyInCollisionSphere && !isProcessedBefore) {
 				BroadcastMessage otherHighestUav = getHighestPriorityLinkedUav(otherUav.id);
 
 				boolean isLowerPriority = thisHighestUav.priority > otherHighestUav.priority;
@@ -511,26 +560,26 @@ public class Quadcopter extends AbstractObject {
 		printedWaypoint = targetWaypoint;
 
 		// Target Height Line
-		x1 = printedWaypoint.x;
-		y1 = (printedWaypoint.y - origin.y) / 2.0f + printedWaypoint.z;
-		x2 = printedWaypoint.x;
-		y2 = (printedWaypoint.y - origin.y) / 2.0f;
-
-		shapeRenderer.setColor(0, 0, 1, 0.1f);
-		shapeRenderer.line(x1, y1, x2, y2);
+		// x1 = printedWaypoint.x;
+		// y1 = (printedWaypoint.y - origin.y) / 2.0f + printedWaypoint.z;
+		// x2 = printedWaypoint.x;
+		// y2 = (printedWaypoint.y - origin.y) / 2.0f;
+		//
+		// shapeRenderer.setColor(0, 0, 1, 0.1f);
+		// shapeRenderer.line(x1, y1, x2, y2);
 
 		// Target Line
-		x1 = position.x;
-		y1 = (position.y - origin.y) / 2.0f + position.z;
-		x2 = printedWaypoint.x;
-		y2 = (printedWaypoint.y - origin.y) / 2.0f + printedWaypoint.z;
-
-		if (avoiding) {
-			shapeRenderer.setColor(1, 0, 0, 1);
-		} else {
-			shapeRenderer.setColor(0, 1, 0, 1);
-		}
-		shapeRenderer.line(x1, y1, x2, y2);
+		// x1 = position.x;
+		// y1 = (position.y - origin.y) / 2.0f + position.z;
+		// x2 = printedWaypoint.x;
+		// y2 = (printedWaypoint.y - origin.y) / 2.0f + printedWaypoint.z;
+		//
+		// if (avoiding) {
+		// shapeRenderer.setColor(1, 0, 0, 1);
+		// } else {
+		// shapeRenderer.setColor(0, 1, 0, 1);
+		// }
+		// shapeRenderer.line(x1, y1, x2, y2);
 
 		// Broadcast Danger Area
 
@@ -547,11 +596,13 @@ class BroadcastMessage {
 	int priority;
 	Vector3 position;
 	float time;
+	boolean disabled;
 
 	public BroadcastMessage(int id, int priority, Vector3 location) {
 		this.id = id;
 		this.priority = priority;
 		this.position = location;
 		time = 0;
+		disabled = false;
 	}
 }
