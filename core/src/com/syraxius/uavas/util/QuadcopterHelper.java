@@ -33,17 +33,23 @@ public class QuadcopterHelper {
 		return rotationVector;
 	}
 
-	public static void generateRandomCorners(ArrayList<Vector3> waypoints, float separation) {
-		for (int i = 0; i < 1000; i++) {
+	public static ArrayList<Vector3> generateRandomCorners(float separation, int count) {
+		ArrayList<Vector3> waypoints = new ArrayList<Vector3>();
+
+		for (int i = 0; i < count; i++) {
 			float x = (float) (Math.random() > 0.5 ? (-separation / 2) : (separation / 2));
 			float y = (float) (Math.random() > 0.5 ? (-separation / 2) : (separation / 2));
 			float z = (float) (3);
 			waypoints.add(new Vector3(x, y, z));
 		}
+
+		return waypoints;
 	}
 
-	public static void generateToFro(ArrayList<Vector3> waypoints, float separation) {
-		for (int i = 0; i < 100; i++) {
+	public static ArrayList<Vector3> generateToFro(float separation, int count) {
+		ArrayList<Vector3> waypoints = new ArrayList<Vector3>();
+
+		for (int i = 0; i < count; i++) {
 			float y = 0;
 			float z = (float) (3);
 			float x;
@@ -53,19 +59,31 @@ public class QuadcopterHelper {
 			x = (float) (separation / 2);
 			waypoints.add(new Vector3(x, y, z));
 		}
+
+		return waypoints;
 	}
 
-	public static void generateRandom(ArrayList<Vector3> waypoints, float separation) {
-		for (int i = 0; i < 1000; i++) {
+	public static ArrayList<Vector3> generateRandom(float separation, int count) {
+		ArrayList<Vector3> waypoints = new ArrayList<Vector3>();
+
+		for (int i = 0; i < count; i++) {
 			float x = (float) (-separation / 2 + Math.random() * separation);
 			float y = (float) (-separation / 2 + Math.random() * separation);
 			float z = (float) (3);
 			waypoints.add(new Vector3(x, y, z));
 		}
+
+		return waypoints;
 	}
 
-	public static void generateCentral(ArrayList<Vector3> waypoints) {
-		waypoints.add(new Vector3(0, 0, 3));
+	public static ArrayList<Vector3> generateCentral(int count) {
+		ArrayList<Vector3> waypoints = new ArrayList<Vector3>();
+
+		for (int i = 0; i < count; i++) {
+			waypoints.add(new Vector3(0, 0, 3));
+		}
+
+		return waypoints;
 	}
 
 	public static float calculateCollisionTime(Vector3 ownship, Vector3 ownshipVelocity, Vector3 intruder, float dmin) {

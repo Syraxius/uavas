@@ -9,16 +9,20 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
 import com.syraxius.uavas.main.Assets;
+import com.syraxius.uavas.util.Constants;
 import com.syraxius.uavas.util.QuadcopterHelper;
 
 public class Quadcopter extends AbstractObject {
-	private static final float TIME_SCALE = 5;
+	private static final float TIME_SCALE = 1;
 	private static final float TIME_CAP = 0.05f;
 	private static final float PRIORITY_HEIGHT = 17f;
 	private static final float BROADCAST_PERIOD = 0.01f;
-	private static final int NUM_QUADCOPTERS = 250;
+	private static final int NUM_QUADCOPTERS = 3;
 
 	private TextureRegion quadcopter;
+	private float red;
+	private float green;
+	private float blue;
 
 	public static ArrayList<BroadcastMessage> locationBroadcast = new ArrayList<BroadcastMessage>();
 	public static ArrayList<Quadcopter> directCommunication = new ArrayList<Quadcopter>(NUM_QUADCOPTERS);
@@ -30,7 +34,12 @@ public class Quadcopter extends AbstractObject {
 		ARMED, COLLIDED
 	};
 
+	public enum ControllerState {
+		NORMAL, AVOIDING, CRITICAL, POST_AVOIDANCE
+	};
+
 	public States state;
+	public ControllerState cState;
 
 	public int id;
 	public int priority;
@@ -63,47 +72,41 @@ public class Quadcopter extends AbstractObject {
 	double originalDeltaTime;
 	double transformedDeltaTime;
 
-	public Quadcopter(int id) {
-		dimension.set(0.6f, 0.3f);
-		origin.set(0.3f, 0.15f);
-		quadcopter = Assets.instance.quadcopter.quadcopter;
-
-		waypoints = new ArrayList<Vector3>();
-		targetWaypoint = new Vector3();
-		guidedWaypoint = new Vector3();
-
-		position.x = (float) (-100 + Math.random() * 200);
-		position.y = (float) (-100 + Math.random() * 200);
-		position.z = 3;
-
-		QuadcopterHelper.generateRandomCorners(waypoints, 30);
-		// QuadcopterHelper.generateToFro(waypoints, 30);
-		// QuadcopterHelper.generateRandom(waypoints, 10);
-		// QuadcopterHelper.generateCentral(waypoints);
-
+	public Quadcopter(int id, Vector3 starting, ArrayList<Vector3> waypoints) {
+		this.position = starting;
+		this.waypoints = waypoints;
 		init(id);
 	}
 
 	public Quadcopter(int id, Vector3 starting, Vector3 ending) {
-		dimension.set(0.6f, 0.3f);
-		origin.set(0.3f, 0.15f);
-		quadcopter = Assets.instance.quadcopter.quadcopter;
-
-		waypoints = new ArrayList<Vector3>();
-		targetWaypoint = new Vector3();
-		guidedWaypoint = new Vector3();
-
-		position = starting;
-		waypoints.add(ending);
-
+		this.position = starting;
+		this.waypoints = new ArrayList<Vector3>();
+		this.waypoints.add(ending);
 		init(id);
 	}
 
 	private void init(int id) {
+		quadcopter = Assets.instance.greypuck.greypuck;
+		red = 1.0f;
+		green = 1.0f;
+		blue = 1.0f;
+
+		if (Constants.VIEW_2D_ONLY) {
+			dimension.set(0.6f, 0.6f);
+			origin.set(0.3f, 0.3f);
+		} else {
+			dimension.set(0.6f, 0.3f);
+			origin.set(0.3f, 0.15f);
+		}
+
+		targetWaypoint = new Vector3();
+		guidedWaypoint = new Vector3();
+
 		locationBroadcast.add(id, new BroadcastMessage(id, 0, new Vector3(position)));
 		directCommunication.add(id, this);
 
 		state = States.ARMED;
+		cState = ControllerState.NORMAL;
 
 		this.id = id;
 		priority = 0;
@@ -127,6 +130,12 @@ public class Quadcopter extends AbstractObject {
 		r = 0.3;
 
 		targetWaypoint = waypoints.remove(0);
+	}
+
+	public void setColor(float red, float green, float blue) {
+		this.red = red;
+		this.green = green;
+		this.blue = blue;
 	}
 
 	@Override
@@ -170,7 +179,7 @@ public class Quadcopter extends AbstractObject {
 		double d4partial = d3 + d1multi + d4ds + 3 * d4dsdec;
 		double d3extended = d3 + d1multi;
 
-		dmin = (float) (d3 * 2);
+		dmin = (float) d3;
 
 		if (state == States.ARMED) {
 			taskWaypoint();
@@ -247,6 +256,20 @@ public class Quadcopter extends AbstractObject {
 
 		clearCheckedFlag();
 		BroadcastMessage highestUav = getHighestPriorityLinkedUav(id);
+
+		switch (cState) {
+		case NORMAL:
+			break;
+
+		case AVOIDING:
+			break;
+
+		case CRITICAL:
+			break;
+
+		case POST_AVOIDANCE:
+			break;
+		}
 
 		avoiding = false;
 		predictivelyAvoiding = false;
@@ -339,9 +362,9 @@ public class Quadcopter extends AbstractObject {
 					avoiding = true;
 					numAvoiding++;
 					generatorVector.add(QuadcopterHelper.repulsion2d(this.position, other.position, timeScaleDistance));
-					/*if (numAvoiding > 1) {
-						generatorVector.add(QuadcopterHelper.repulsion2d(this.position, highestUav.position, timeScaleDistance));
-					}*/
+					/*
+					 * if (numAvoiding > 1) { generatorVector.add(QuadcopterHelper.repulsion2d(this.position, highestUav.position, timeScaleDistance)); }
+					 */
 				}
 			}
 		}
@@ -508,86 +531,122 @@ public class Quadcopter extends AbstractObject {
 
 	@Override
 	public void render(SpriteBatch batch) {
-
-		// Ground Shadow
-
-		if (state == States.ARMED) {
-			batch.setColor(1.0f, 1.0f, 1.0f, 0.5f);
-		} else {
-			batch.setColor(1.0f, 0, 0, 0.5f);
-		}
-
-		batch.draw(quadcopter.getTexture(), position.x - origin.x, (position.y - origin.y) / 2.0f, origin.x, origin.y, dimension.x, dimension.y, scale.x, scale.y, rotation, quadcopter.getRegionX(), quadcopter.getRegionY(), quadcopter.getRegionWidth(), quadcopter.getRegionHeight(), true, false);
-
-		// UAV
-
-		if (state == States.ARMED) {
-			batch.setColor(1.0f, 1.0f, 1.0f, 1.0f);
-		} else {
-			batch.setColor(1.0f, 0, 0, 1.0f);
-		}
-
-		batch.draw(quadcopter.getTexture(), position.x - origin.x, (position.y - origin.y) / 2.0f + position.z, origin.x, origin.y, dimension.x, dimension.y, scale.x, scale.y, rotation, quadcopter.getRegionX(), quadcopter.getRegionY(), quadcopter.getRegionWidth(), quadcopter.getRegionHeight(), true, false);
-
 		Vector3 printedWaypoint;
-		printedWaypoint = guidedWaypoint;
+		printedWaypoint = targetWaypoint;
 
-		// Target Ground Shadow
+		if (Constants.VIEW_2D_ONLY) {
+			if (Constants.DISPLAY_OWNSHIP) {
+				batch.setColor(red, green, blue, 1.0f);
+				batch.draw(quadcopter.getTexture(), position.x - origin.x, position.y - origin.y, origin.x, origin.y, dimension.x, dimension.y, scale.x, scale.y, rotation, quadcopter.getRegionX(), quadcopter.getRegionY(), quadcopter.getRegionWidth(), quadcopter.getRegionHeight(), true, false);
+			}
 
-		batch.setColor(1.0f, 1.0f, 1.0f, 0.1f);
-		batch.draw(quadcopter.getTexture(), printedWaypoint.x - origin.x, (printedWaypoint.y - origin.y) / 2.0f, origin.x, origin.y, dimension.x, dimension.y, scale.x, scale.y, rotation, quadcopter.getRegionX(), quadcopter.getRegionY(), quadcopter.getRegionWidth(), quadcopter.getRegionHeight(), true, false);
+			if (Constants.DISPLAY_TARGET) {
+				batch.setColor(red, green, blue, 0.2f);
+				batch.draw(quadcopter.getTexture(), printedWaypoint.x - origin.x, printedWaypoint.y - origin.y, origin.x, origin.y, dimension.x, dimension.y, scale.x, scale.y, rotation, quadcopter.getRegionX(), quadcopter.getRegionY(), quadcopter.getRegionWidth(), quadcopter.getRegionHeight(), true, false);
+			}
+		} else {
+			if (Constants.DISPLAY_OWNSHIP_SHADOW) {
+				if (state == States.ARMED) {
+					batch.setColor(1.0f, 1.0f, 1.0f, 0.5f);
+				} else {
+					batch.setColor(1.0f, 0, 0, 0.5f);
+				}
+				batch.draw(quadcopter.getTexture(), position.x - origin.x, (position.y - origin.y) / 2.0f, origin.x, origin.y, dimension.x, dimension.y, scale.x, scale.y, rotation, quadcopter.getRegionX(), quadcopter.getRegionY(), quadcopter.getRegionWidth(), quadcopter.getRegionHeight(), true, false);
+			}
 
-		// Target UAV
+			if (Constants.DISPLAY_OWNSHIP) {
+				if (state == States.ARMED) {
+					batch.setColor(1.0f, 1.0f, 1.0f, 1.0f);
+				} else {
+					batch.setColor(1.0f, 0, 0, 1.0f);
+				}
+				batch.draw(quadcopter.getTexture(), position.x - origin.x, (position.y - origin.y) / 2.0f + position.z, origin.x, origin.y, dimension.x, dimension.y, scale.x, scale.y, rotation, quadcopter.getRegionX(), quadcopter.getRegionY(), quadcopter.getRegionWidth(), quadcopter.getRegionHeight(), true, false);
+			}
 
-		batch.setColor(1.0f, 1.0f, 1.0f, 0.2f);
-		batch.draw(quadcopter.getTexture(), printedWaypoint.x - origin.x, (printedWaypoint.y - origin.y) / 2.0f + printedWaypoint.z, origin.x, origin.y, dimension.x, dimension.y, scale.x, scale.y, rotation, quadcopter.getRegionX(), quadcopter.getRegionY(), quadcopter.getRegionWidth(), quadcopter.getRegionHeight(), true, false);
+			if (Constants.DISPLAY_TARGET_SHADOW) {
+				batch.setColor(1.0f, 1.0f, 1.0f, 0.1f);
+				batch.draw(quadcopter.getTexture(), printedWaypoint.x - origin.x, (printedWaypoint.y - origin.y) / 2.0f, origin.x, origin.y, dimension.x, dimension.y, scale.x, scale.y, rotation, quadcopter.getRegionX(), quadcopter.getRegionY(), quadcopter.getRegionWidth(), quadcopter.getRegionHeight(), true, false);
+			}
+
+			if (Constants.DISPLAY_TARGET) {
+				batch.setColor(1.0f, 1.0f, 1.0f, 0.2f);
+				batch.draw(quadcopter.getTexture(), printedWaypoint.x - origin.x, (printedWaypoint.y - origin.y) / 2.0f + printedWaypoint.z, origin.x, origin.y, dimension.x, dimension.y, scale.x, scale.y, rotation, quadcopter.getRegionX(), quadcopter.getRegionY(), quadcopter.getRegionWidth(), quadcopter.getRegionHeight(), true, false);
+			}
+		}
+
 		batch.setColor(1.0f, 1.0f, 1.0f, 1.0f);
 	}
 
 	@Override
 	public void shapeRender(ShapeRenderer shapeRenderer, Camera camera) {
-		// Height Line
-		float x1 = position.x;
-		float y1 = (position.y - origin.y) / 2.0f + position.z;
-		float x2 = position.x;
-		float y2 = (position.y - origin.y) / 2.0f;
-
-		shapeRenderer.setColor(0, 0, 0, 0.1f);
-		shapeRenderer.line(x1, y1, x2, y2);
-
 		Vector3 printedWaypoint;
-
 		printedWaypoint = targetWaypoint;
 
-		// Target Height Line
-		// x1 = printedWaypoint.x;
-		// y1 = (printedWaypoint.y - origin.y) / 2.0f + printedWaypoint.z;
-		// x2 = printedWaypoint.x;
-		// y2 = (printedWaypoint.y - origin.y) / 2.0f;
-		//
-		// shapeRenderer.setColor(0, 0, 1, 0.1f);
-		// shapeRenderer.line(x1, y1, x2, y2);
+		if (Constants.VIEW_2D_ONLY) {
+			if (Constants.DISPLAY_TARGET_LINE) {
+				float x1 = position.x;
+				float y1 = position.y;
+				float x2 = printedWaypoint.x;
+				float y2 = printedWaypoint.y;
 
-		// Target Line
-		// x1 = position.x;
-		// y1 = (position.y - origin.y) / 2.0f + position.z;
-		// x2 = printedWaypoint.x;
-		// y2 = (printedWaypoint.y - origin.y) / 2.0f + printedWaypoint.z;
-		//
-		// if (avoiding) {
-		// shapeRenderer.setColor(1, 0, 0, 1);
-		// } else {
-		// shapeRenderer.setColor(0, 1, 0, 1);
-		// }
-		// shapeRenderer.line(x1, y1, x2, y2);
+				if (avoiding) {
+					shapeRenderer.setColor(1, 0, 0, 1);
+				} else {
+					shapeRenderer.setColor(0, 1, 0, 1);
+				}
+				shapeRenderer.line(x1, y1, x2, y2);
+			}
 
-		// Broadcast Danger Area
+			if (Constants.DISPLAY_BROADCAST_DANGER_AREA) {
+				BroadcastMessage bM = locationBroadcast.get(id);
+				float dTb = (System.currentTimeMillis() - bM.time) / 1000f;
+				float bda = (float) (dTb * v);
+				shapeRenderer.setColor(1, 0, 0, 0.1f);
+				shapeRenderer.circle(bM.position.x, bM.position.y / 2 + bM.position.z, bda, 40);
+			}
+		} else {
+			if (Constants.DISPLAY_OWNSHIP_HEIGHT_LINE) {
+				float x1 = position.x;
+				float y1 = (position.y - origin.y) / 2.0f + position.z;
+				float x2 = position.x;
+				float y2 = (position.y - origin.y) / 2.0f;
 
-		// BroadcastMessage bM = locationBroadcast.get(id);
-		// float dTb = (System.currentTimeMillis() - bM.time) / 1000f;
-		// float bda = (float) (dTb * v);
-		// shapeRenderer.setColor(1, 0, 0, 0.1f);
-		// shapeRenderer.circle(bM.position.x, bM.position.y / 2 + bM.position.z, bda, 40);
+				shapeRenderer.setColor(0, 0, 0, 0.1f);
+				shapeRenderer.line(x1, y1, x2, y2);
+			}
+
+			if (Constants.DISPLAY_TARGET_HEIGHT_LINE) {
+				float x1 = printedWaypoint.x;
+				float y1 = (printedWaypoint.y - origin.y) / 2.0f + printedWaypoint.z;
+				float x2 = printedWaypoint.x;
+				float y2 = (printedWaypoint.y - origin.y) / 2.0f;
+
+				shapeRenderer.setColor(0, 0, 1, 0.1f);
+				shapeRenderer.line(x1, y1, x2, y2);
+			}
+
+			if (Constants.DISPLAY_TARGET_LINE) {
+				float x1 = position.x;
+				float y1 = (position.y - origin.y) / 2.0f + position.z;
+				float x2 = printedWaypoint.x;
+				float y2 = (printedWaypoint.y - origin.y) / 2.0f + printedWaypoint.z;
+
+				if (avoiding) {
+					shapeRenderer.setColor(1, 0, 0, 1);
+				} else {
+					shapeRenderer.setColor(0, 1, 0, 1);
+				}
+				shapeRenderer.line(x1, y1, x2, y2);
+			}
+
+			if (Constants.DISPLAY_BROADCAST_DANGER_AREA) {
+				BroadcastMessage bM = locationBroadcast.get(id);
+				float dTb = (System.currentTimeMillis() - bM.time) / 1000f;
+				float bda = (float) (dTb * v);
+				shapeRenderer.setColor(1, 0, 0, 0.1f);
+				shapeRenderer.circle(bM.position.x, bM.position.y / 2 + bM.position.z, bda, 40);
+			}
+		}
 	}
 }
 

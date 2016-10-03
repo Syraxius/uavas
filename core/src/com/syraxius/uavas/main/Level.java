@@ -1,5 +1,7 @@
 package com.syraxius.uavas.main;
 
+import java.util.ArrayList;
+
 import com.badlogic.gdx.graphics.Camera;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
@@ -7,6 +9,7 @@ import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.Array;
 import com.syraxius.uavas.objects.Quadcopter;
 import com.syraxius.uavas.objects.Quadcopter.States;
+import com.syraxius.uavas.util.QuadcopterHelper;
 
 public class Level {
 	public static final String TAG = Level.class.getName();
@@ -19,7 +22,9 @@ public class Level {
 
 	private void init() {
 		quadcopters = new Array<Quadcopter>();
-		int numQuadcopters = 250;
+		int numQuadcopters = 3;
+
+		// Generate Circular Case
 		// float degreesPerUav = 360.0f / numQuadcopters;
 		// int circleRadius = 100;
 		// for (int i = 0; i < numQuadcopters; i++) {
@@ -29,8 +34,33 @@ public class Level {
 		// double y2 = circleRadius * Math.sin((degreesPerUav * i + 180) / 180 * Math.PI);
 		// quadcopters.add(new Quadcopter(i, new Vector3((float) x1, (float) y1, 3.0f), new Vector3((float) x2, (float) y2, 3.0f)));
 		// }
+
+		// QuadcopterHelper.generateToFro(30, 100);
+		// QuadcopterHelper.generateRandom(10, 1000);
+		// QuadcopterHelper.generateCentral(1000);
+
 		for (int i = 0; i < numQuadcopters; i++) {
-			quadcopters.add(new Quadcopter(i));
+			int spawnRadius = 5;
+
+			Vector3 starting = new Vector3();
+			starting.x = (float) (-spawnRadius + Math.random() * (2 * spawnRadius));
+			starting.y = (float) (-spawnRadius + Math.random() * (2 * spawnRadius));
+			starting.z = 3;
+
+			ArrayList<Vector3> waypoints = QuadcopterHelper.generateRandomCorners(10, 1000);
+
+			Quadcopter quadcopter = new Quadcopter(i, starting, waypoints);
+
+			// Color will be between 0.6 to 0.7
+			float a = 0.6f;
+			float b = 0.3f;
+			float red = a + (float) ((1 - a) * Math.random()) - b;
+			float green = a + (float) ((1 - a) * Math.random()) - b;
+			float blue = a + (float) ((1 - a) * Math.random()) - b;
+
+			quadcopter.setColor(red, green, blue);
+
+			quadcopters.add(quadcopter);
 		}
 	}
 

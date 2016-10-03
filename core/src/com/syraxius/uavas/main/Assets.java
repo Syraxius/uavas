@@ -17,6 +17,7 @@ public class Assets implements Disposable, AssetErrorListener {
 	private AssetManager assetManager;
 
 	public AssetQuadcopter quadcopter;
+	public AssetGreyPuck greypuck;
 
 	private Assets() {
 	}
@@ -43,6 +44,7 @@ public class Assets implements Disposable, AssetErrorListener {
 		}
 
 		quadcopter = new AssetQuadcopter(atlas);
+		greypuck = new AssetGreyPuck(atlas);
 	}
 
 	@Override
@@ -60,6 +62,14 @@ public class Assets implements Disposable, AssetErrorListener {
 
 		public AssetQuadcopter(TextureAtlas atlas) {
 			quadcopter = atlas.findRegion("quadcopter");
+		}
+	}
+	
+	public class AssetGreyPuck {
+		public final AtlasRegion greypuck;
+
+		public AssetGreyPuck(TextureAtlas atlas) {
+			greypuck = atlas.findRegion("greypuck");
 		}
 	}
 }

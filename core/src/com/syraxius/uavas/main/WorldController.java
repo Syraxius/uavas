@@ -32,7 +32,7 @@ public class WorldController extends InputAdapter {
 		if (Gdx.app.getType() != ApplicationType.Desktop)
 			return;
 
-		float sprMoveSpeed = 5 * deltaTime;
+		float moveSpeed = 5 * deltaTime;
 
 		if (Gdx.input.isKeyPressed(Keys.A)) {
 		}
@@ -41,6 +41,11 @@ public class WorldController extends InputAdapter {
 		if (Gdx.input.isKeyPressed(Keys.W)) {
 		}
 		if (Gdx.input.isKeyPressed(Keys.S)) {
+		}
+		if (Gdx.input.isKeyPressed(Keys.F)) {
+		}
+		if (Gdx.input.isKeyPressed(Keys.ESCAPE)) {
+			Gdx.app.exit();
 		}
 	}
 
